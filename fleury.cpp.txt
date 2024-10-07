@@ -1,0 +1,299 @@
+#include <iostream>
+#include <vector>
+#include <utility>
+#include <stack>
+#include <queue>
+#include <climits>
+
+using namespace std;
+
+struct graph {
+    long vertexCount, edgeCount;
+
+    //Pair format (Edge number, connected node, length)
+
+    vector<vector<pair<long, pair<long, long>>>> adjList;
+
+    void init(long v) {
+        vertexCount = v;
+        edgeCount = 0;
+
+        for (int i = 0; i < vertexCount; i++) {
+            adjList.push_back({}); // inserts V ammount of empty vector
+        }
+    }
+
+    void add_edge(long edgenumber, long vertex1, long vertex2, long weight) {
+        adjList[vertex1].push_back(make_pair(edgenumber, make_pair(vertex2, weight)));
+        adjList[vertex2].push_back(make_pair(edgenumber, make_pair(vertex1, weight)));
+        edgeCount++;
+    }
+
+    void dfs(vector<long>& result, long start) {
+        vector<bool> visited(vertexCount, false);
+        stack<long> st;
+
+        st.push(start);
+        visited[start] = true;
+        result.push_back(start);
+
+        while (!st.empty()) {
+            long temp = st.top();
+            st.pop();
+
+            if (!visited[temp]) {
+                result.push_back(temp);
+                visited[temp] = true;
+            }
+
+            for (auto vertex : adjList[temp]) {
+                if (!visited[vertex.second.first])
+                    st.push(vertex.second.first);
+            }
+        }
+    }
+
+    void bfs(vector<long>& result, long start) {
+        vector<bool> visited(vertexCount, false);
+        queue<long> q;
+
+        q.push(start);
+        visited[start] = true;
+        result.push_back(start);
+
+        while (!q.empty()) {
+            long temp = q.front();
+            q.pop();
+
+            for (auto vertex : adjList[temp]) {
+                if (!visited[vertex.second.first]) {
+                    q.push(vertex.second.first);
+                    visited[vertex.second.first] = true;
+                    result.push_back(vertex.second.first);
+                }
+            }
+        }
+    }
+
+    void dijkstra(vector<long>& result, vector<long>& previous, long start) {
+        vector<bool> visited(vertexCount, false);
+        priority_queue <pair<long, long>,
+            vector <pair<long, long>>,
+            greater <pair<long, long>> > pq;
+        result = vector<long>(vertexCount, LONG_MAX);
+        previous = vector<long>(vertexCount, LONG_MIN);
+
+        pq.push(make_pair(0, start));
+        result[start] = 0;
+        previous[start] = LONG_MIN;
+
+        while (!pq.empty()) {
+            auto temp = pq.top();
+            pq.pop();
+
+            visited[temp.second] = true;
+
+            for (auto vertex : adjList[temp.second]) {
+                long nextVertex = vertex.second.first;
+                long weight = vertex.second.second;
+
+                if (!visited[nextVertex]) {
+                    if (temp.first + weight < result[nextVertex]) {
+                        result[nextVertex] = temp.first + weight;
+                        previous[nextVertex] = temp.second;
+                        pq.push(make_pair(result[nextVertex], nextVertex));
+                    }
+                }
+            }
+        }
+    }
+
+    vector<long> dijkstra_path(vector<long>& previous, long source, long target) {
+        vector<long> path;
+        long temp = target;
+
+        while (previous[temp] != LONG_MIN) {
+            path.insert(path.begin(), temp);
+            temp = previous[temp];
+        }
+
+        path.insert(path.begin(), temp);
+        return path;
+    }
+
+    //Modify the graph so that it's eulerian, return the amount of odd degrees
+    void __modify_to_eulerian() {
+        vector<long> oddVertex;
+        vector<pair<long, long>> edgeToOddPair;
+        for (long i = 0; i < adjList.size(); ++i) {
+            //cout << i + 1 << "  " << adjList[i].size() << endl;
+            if (adjList[i].size() % 2 != 0) {
+                oddVertex.push_back(i);
+            }
+        }
+        //cout << "Ood vertex : " << oddVertex[0] << " " << oddVertex[1] << endl;
+        //Check for odd size
+        if (oddVertex.size() == 0) return;
+
+        //Add duplicate vertex so fleurian can be performed later
+        else if (oddVertex.size() == 2) {
+            long smallestEdge = -1;
+            long smallestDistance = LONG_MAX;
+            for (auto a : adjList[oddVertex[0]]) {
+                //cout << "Current vertex : " << a.first << ' '<< a.second.first << ' ' << a.second.second << endl;
+                if ((a.second.first == oddVertex[1]) && (smallestDistance > a.second.second)) {
+                    //cout << "Chosen : " << a.first << ' ' << a.second.first << ' ' << a.second.second << endl;
+                    smallestEdge = a.first;
+                    smallestDistance = a.second.second;
+                }
+            }
+
+            add_edge(smallestEdge, oddVertex[0], oddVertex[1], smallestDistance);
+        }
+        
+        //Exit if not eulerian
+        else {
+            cout << "NOT EULERIAN OR SEMI EULERIAN" << endl;
+            exit(0);
+        }
+        //Dijkstra method can be added later
+    }
+
+    void fleury_eulerian(long start) {
+        __modify_to_eulerian();
+        vector<vector<pair<long, pair<long, long>>>> adjListTemp = adjList;
+        long current = start, totalEdgeCount = edgeCount;
+
+        vector<pair<long, pair<long, long>>> visitedEdge;
+        vector<long> tempEdgeCountOfVertex(vertexCount, 0);
+
+        // Store edge count to determine a bridge later
+        for (long i = 0; i < vertexCount; ++i) {
+            tempEdgeCountOfVertex[i] = adjListTemp[i].size();
+        }
+
+        while (totalEdgeCount != 0) {
+            //Find all possible nodes
+            //cout << totalEdgeCount << endl;
+            for (long i = 0; i < adjListTemp[current].size(); ++i) {
+                if (!adjListTemp[adjListTemp[current][i].second.first].empty()) {
+                    if (adjListTemp[adjListTemp[current][i].second.first].size() > 1 ||
+                        (adjListTemp[adjListTemp[current][i].second.first].size() == 1 && adjListTemp[current].size() == 1)) {
+                        pair<long, pair<long, long>> edgeToRemove = adjListTemp[current][i];
+                        //cout << "To remove : " << edgeToRemove.first << ' ' << edgeToRemove.second.first << ' ' << edgeToRemove.second.second << endl;
+                        //Store the next node for later
+                        long temp = current;
+                        //Remove the edge at current
+                        //adjListTemp[current].erase(remove(adjListTemp[current].begin(), adjListTemp[current].end(), edgeToRemove), adjListTemp[current].end());
+
+                        for (long j = 0; j < adjListTemp[current].size(); ++j) {
+                            //cout << "Current Edge : " << adjListTemp[current][j].first << ' ' << adjListTemp[current][j].second.first << ' ' << adjListTemp[current][j].second.second << endl;
+                            if (
+                                (adjListTemp[current][j].first == edgeToRemove.first) &&
+                                (adjListTemp[current][j].second.first == edgeToRemove.second.first)&&
+                                (adjListTemp[current][j].second.second == edgeToRemove.second.second)
+                                ) {
+                                //cout << "1: Removed Edge " << adjListTemp[current][i].first << ' ' << adjListTemp[current][i].second.first << ' ' << adjListTemp[current][i].second.second << endl;
+                                adjListTemp[current].erase(adjListTemp[current].begin() + j);
+                                break;
+                            }
+                        }
+                        //Change the current edge to the new one, remove the same edge as well to avoid duplicate
+                        current = edgeToRemove.second.first;
+                        edgeToRemove = make_pair(edgeToRemove.first, make_pair(temp, edgeToRemove.second.second));
+                        //cout << "To remove : " << edgeToRemove.first << ' ' << edgeToRemove.second.first << ' ' << edgeToRemove.second.second << endl;
+                        for (long j = 0; j < adjListTemp[current].size(); ++j) {
+                            //cout << "Current Edge : " << adjListTemp[current][j].first << ' ' << adjListTemp[current][j].second.first << ' ' << adjListTemp[current][j].second.second << endl;
+                            if (
+                                (adjListTemp[current][j].first == edgeToRemove.first) &&
+                                (adjListTemp[current][j].second.first == edgeToRemove.second.first) &&
+                                (adjListTemp[current][j].second.second == edgeToRemove.second.second)
+                                ) {
+                                //cout << "2: Removed Edge " << adjListTemp[current][j].first << ' ' << adjListTemp[current][j].second.first << ' ' << adjListTemp[current][j].second.second << endl << endl;
+                                adjListTemp[current].erase(adjListTemp[current].begin() + j);
+                                break;
+                            }
+                        }
+
+                        visitedEdge.push_back(edgeToRemove);
+                        
+                        totalEdgeCount--;
+                        break;
+                    }
+                }
+            }
+        }
+        long totalCost = 0;
+        cout << "Euler Path : ";
+        for (auto a : visitedEdge) {
+            totalCost += a.second.second;
+            cout << a.first << ' ';
+        }
+        cout << endl;
+        cout << "Cost : " << totalCost << endl;
+    }
+};
+
+int main() {
+    graph g;
+
+    long vertexAmount, edgeAmount, edgeNum, inputV1, inputV2, inputVW, starting_point;
+    cin >> vertexAmount >> edgeAmount;
+    g.init(vertexAmount);
+    for (int i = 0; i < edgeAmount; ++i) {
+        cin >> edgeNum >> inputV1 >> inputV2 >> inputVW;
+        g.add_edge(edgeNum, inputV1 - 1, inputV2 - 1, inputVW);
+    }
+
+
+    cin >> starting_point;
+    starting_point--;
+    
+    
+    g.fleury_eulerian(starting_point);
+
+    return 0;
+}
+
+/*
+    vector<long> dijkstra_result, dijkstra_previous, dijkstra_path;
+
+    g.dijkstra(dijkstra_result, dijkstra_previous, 0);
+
+    for (int i = 0; i < dijkstra_result.size(); i++) {
+        cout << i << " " << dijkstra_result[i] << endl;
+    }
+
+    dijkstra_path = g.dijkstra_path(dijkstra_previous, 0, 1);
+
+    cout << "Path : ";
+    for (auto a : dijkstra_path) {
+        cout << a << ' ';
+    }
+    cout << endl;
+
+    cout << "Size of each adjacent list" << endl;
+    for (int i = 0; i < g.adjList.size(); ++i) {
+        cout << i + 1 << " : " << g.adjList[i].size() << endl;
+    }
+    */
+
+/*
+Input used
+5 6
+0 1 2 2
+1 1 5 6
+2 2 3 18
+3 2 4 7
+4 3 4 17
+5 4 5 12
+1
+
+g.init(5);
+    g.add_edge(0, 0, 1, 2);
+    g.add_edge(1, 0, 4, 6);
+    g.add_edge(2, 1, 2, 18);
+    g.add_edge(3, 1, 3, 7);
+    g.add_edge(4, 2, 3, 17);
+    g.add_edge(5, 3, 4, 12);
+*/
